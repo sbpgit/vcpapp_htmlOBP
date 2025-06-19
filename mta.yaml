@@ -1,0 +1,83 @@
+_schema-version: "3.2"
+ID: vcpappvcporderbasedplanning
+description: Standalone Fiori App with Basic Auth to backend
+version: 0.0.1
+
+modules:
+  - name: vcpappvcporderbasedplanning-destination-content
+    type: com.sap.application.content
+    requires:
+      - name: vcpappvcporderbasedplanning-destination-service
+        parameters:
+          content-target: true
+      - name: vcpappvcporderbasedplanning-repo-host
+        parameters:
+          service-key:
+            name: vcpappvcporderbasedplanning-repo-host-key
+    parameters:
+      content:
+        instance:
+          destinations:
+            - Name: vcpappvcporderbasedplanning_html_repo_host
+              ServiceInstanceName: vcpappvcporderbasedplanning-html5-service
+              ServiceKeyName: vcpappvcporderbasedplanning-repo-host-key
+              sap.cloud.service: vcpappvcporderbasedplanning
+          existing_destinations_policy: update
+    build-parameters:
+      no-source: true
+
+  - name: vcpappvcporderbasedplanning-app-content
+    type: com.sap.application.content
+    path: .
+    requires:
+      - name: vcpappvcporderbasedplanning-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: resources
+      requires:
+        - artifacts:
+            - vcpappvcporderbasedplanning.zip
+          name: vcpappvcporderbasedplanning
+          target-path: resources/
+
+  - name: vcpappvcporderbasedplanning
+    type: html5
+    path: .
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm install
+        - npm run build:cf
+      supported-platforms: []
+
+resources:
+  - name: vcpappvcporderbasedplanning-destination-service
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+      config:
+        HTML5Runtime_enabled: true
+        init_data:
+          instance:
+            destinations:
+              - Name: ui5
+                URL: https://ui5.sap.com
+                Type: HTTP
+                ProxyType: Internet
+                Authentication: NoAuthentication
+            existing_destinations_policy: update
+        version: 1.0.0
+
+  - name: vcpappvcporderbasedplanning-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-name: vcpappvcporderbasedplanning-html5-service
+      service-plan: app-host
+
+parameters:
+  deploy_mode: html5-repo
+  enable-parallel-deployments: true
