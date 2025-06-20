@@ -407,6 +407,7 @@
     </div>
     <script>
         let uploadedPlanningSystem = null;
+        let fullJobId = null;
     </script>
     <script>
         // Global variables
@@ -611,9 +612,6 @@
                 mutationRate: parseFloat(document.getElementById('mutationRate').value),
                 method: document.getElementById('optimizationMethod').value
             };
-            const controller = new AbortController();
-            const timeout = 10 * 60 * 1000; // 6 minutes
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
             try {
                 showStatus('Starting optimization...', 'info');
                 document.getElementById('loadingDiv').style.display = 'block';
@@ -623,89 +621,75 @@
                 url1 = url1.replace(/\/index\.html$/, '');
 
                 var finalURL = url1 + ("/api/planning/optimize");
-                const responseOptimiz = await fetch(finalURL, {
+
+               await fetch(finalURL, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(config),
-                    signal: controller.signal
-                });
-
-                if (!responseOptimiz.ok) {
-                    const errorData = await responseOptimiz.json();
-                    throw new Error(errorData.message || 'Optimization failed to start');
-                }
-
-                const result = await responseOptimiz.json();
-                if (result.optimizationId) {
-                    currentOptimization = result.optimizationId;
-                    pollOptimizationResults();
-                } else {
-                    showStatus(result.message);
-                    resetOptimizationUI();
-                }
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log("✅ jobId received:", data.jobId);
+                        fullJobId = data.jobId;
+                        pollOptimizationResults(data.jobId);
+                    })
+                    .catch(err => {
+                        console.error("❌ Failed to start optimization:", err);
+                    });
 
             } catch (error) {
-                clearTimeout(timeoutId);
-                if (error.name === 'AbortError') {
-                    showStatus('Request timed out. Please try again.', 'error');
-                } else {
-                    showStatus(`Optimization failed: ${error.message}`, 'error');
-                }
+                showStatus(`Optimization failed: ${error.message}`, 'error');
                 resetOptimizationUI();
             }
         }
 
         async function stopOptimization() {
-            try {
-                var url1 = window.location.href;
-                url1 = url1.replace(/\/index\.html$/, '');
-                var finalURL = url1 + ("/api/optimization/cancel");
-                const responseOptimizCancel = await fetch(finalURL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                });
+            if (fullJobId) {
+                try {
+                    var url1 = window.location.href;
+                    url1 = url1.replace(/\/index\.html$/, '');
+                    var finalURL = url1 + ("/api/planning/optimize/stop");
+                    const response = await fetch(finalURL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fullJobId })
+                    });
+                    if (response.ok) {
+                        showStatus('Cancellation request sent', 'info');
+                        // The actual cancellation will be detected by polling
+                    } else {
+                        showStatus('Failed to cancel optimization', 'error');
+                    }
 
-                if (!responseOptimizCancel.ok) {
-                    const errorData = await responseOptimizCancel.json();
-                    throw new Error(errorData.message || 'Optimization cancellation failed');
-                };
-                showStatus('Optimization stopped', 'info');
-                resetOptimizationUI();
-            } catch (error) {
-                showStatus(`Failed to stop optimization: ${error.message}`, 'error');
+                } catch (error) {
+                    showStatus(`Failed to stop optimization: ${error.message}`, 'error');
+                    resetOptimizationUI();
+                }
+            }
+            else {
+                showStatus("No optimization found", 'info')
             }
         }
 
-        async function pollOptimizationResults() {
-            if (!currentOptimization) return;
+        async function pollOptimizationResults(jobId) {
+            var url1 = window.location.href;
+            url1 = url1.replace(/\/index\.html$/, '');
+            var finalURL = url1 + (`/api/planning/optimize/status/${jobId}`);
+            const res = await fetch(finalURL);
+            const data = await res.json();
 
-            try {
-
-                const response = await fetch(`${API_BASE}/optimization/status/${currentOptimization}`);
-                const result = await response.json();
-
-                if (result.status === 'completed') {
-                    displayResults(result.results);
-                    showStatus('Optimization completed successfully', 'success');
-                    resetOptimizationUI();
-                } else if (result.status === 'failed') {
-                    showStatus(`Optimization failed: ${result.error}`, 'error');
-                    resetOptimizationUI();
-                } else if (result.status === 'running') {
-                    // Continue polling
-                    setTimeout(pollOptimizationResults, 2000);
-
-                    // Update partial results if available
-                    if (result.partialResults) {
-                        displayResults(result.partialResults, true);
-                    }
+            if (data.status === 'running') {
+                setTimeout(() => pollOptimizationResults(jobId), 5000);
+            } else if (data.status === 'completed') {
+                console.log('✅ Optimization completed:', data.result);
+                showStatus("Optimization completed successfully", 'success');
+                resetOptimizationUI();
+            } else if (data.status === 'cancelled' || data.status === 'error') {
+                if (data.error && data.error.includes('cancelled')) {
+                    showStatus('Optimization was cancelled', 'info');
+                } else {
+                    showStatus(`Optimization failed: ${data.error}`, 'error');
                 }
-            } catch (error) {
-                showStatus(`Error checking optimization status: ${error.message}`, 'error');
                 resetOptimizationUI();
             }
         }
