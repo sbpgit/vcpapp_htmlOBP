@@ -108,6 +108,10 @@
             background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
         }
 
+        .btn-secondary1 {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+
         .btn-danger {
             background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
         }
@@ -303,6 +307,9 @@
                     <button class="btn btn-secondary" onclick="downloadFile('optimization_results.xlsx')">
                         Download Optimization Results
                     </button>
+                    <button class="btn btn-secondary1" onclick="downloadFile('optimization_results_Capacity_Pivot.xlsx')">
+                        Download Capacity Results
+                    </button>
                 </div>
             </div>
 
@@ -358,6 +365,26 @@
                 <div class="input-group">
                     <label for="mutationRate">Mutation Rate</label>
                     <input type="number" id="mutationRate" value="0.1" min="0.01" max="1" step="0.01">
+                </div>              
+
+                <div class="input-group">
+                    <label for="PromiseDatePreference">Promise Date Preference</label>
+                    <input type="number" id="PromiseDatePreference" value="0.7" min="0.01" max="1" step="0.01">
+                </div>
+
+                <div class="input-group">
+                    <label for="TimingVarianceWeeks">Timing Variance Weeks</label>
+                    <input type="number" id="TimingVarianceWeeks" value="3" min="1" max="52" step="1">
+                </div>
+
+                <div class="input-group">
+                    <label for="UnnecessaryDelayPenalty">Unnecessary Delay Penalty</label>
+                    <input type="number" id="UnnecessaryDelayPenalty" value="10000" min="1" max="100" step="100">
+                </div>
+
+                <div class="input-group">
+                    <label for="PerfectTimingBonus">Perfect Timing Bonus</label>
+                    <input type="number" id="PerfectTimingBonus" value="50" min="1" max="10000" step="10">
                 </div>
 
                 <div class="input-group">
@@ -506,6 +533,34 @@
 
                     showStatus(`${filename} downloaded successfully`, 'success');
                 }
+                else if(filename.includes("Capacity")){
+                    var url1 = window.location.href;
+                    url1 = url1.replace(/\/index\.html$/, '');
+
+                    var finalURL = url1 + ("/api/planning/downloadPivot-results");
+                    const response2 = await fetch(finalURL, {
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+
+                    })
+                    if (!response2.ok) {
+                        throw new Error(`Download failed: ${response.statusText}`);
+                    }
+
+                    const blob = await response2.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+
+                    showStatus(`${filename} downloaded successfully`, 'success');
+                }
                 else {
                     var url1 = window.location.href;
                     url1 = url1.replace(/\/index\.html$/, '');
@@ -610,13 +665,18 @@
                 populationSize: parseInt(document.getElementById('populationSize').value),
                 generations: parseInt(document.getElementById('generations').value),
                 mutationRate: parseFloat(document.getElementById('mutationRate').value),
-                method: document.getElementById('optimizationMethod').value
+                method: document.getElementById('optimizationMethod').value,
+                promiseDatePreference: parseFloat(document.getElementById('PromiseDatePreference').value),
+                timingVarianceWeeks: parseFloat(document.getElementById('TimingVarianceWeeks').value),
+                unnecessaryDelayPenalty: parseFloat(document.getElementById('UnnecessaryDelayPenalty').value),
+                perfectTimingBonus: parseFloat(document.getElementById('PerfectTimingBonus').value),
             };
             try {
                 showStatus('Starting optimization...', 'info');
                 document.getElementById('loadingDiv').style.display = 'block';
                 document.getElementById('stopBtn').style.display = 'inline-block';
                 document.querySelector('.btn-secondary').style.display = 'none';
+                document.querySelector('.btn-secondary1').style.display = 'none';
                 var url1 = window.location.href;
                 url1 = url1.replace(/\/index\.html$/, '');
 
@@ -687,10 +747,11 @@
             } else if (data.status === 'cancelled' || data.status === 'error') {
                 if (data.error && data.error.includes('cancelled')) {
                     showStatus('Optimization was cancelled', 'info');
+                    resetOptimizationUI();
                 } else {
                     showStatus(`Optimization failed: ${data.error}`, 'error');
-                }
-                resetOptimizationUI();
+                    resetOptimizationUI();
+                }               
             }
         }
 
@@ -716,6 +777,7 @@
             document.getElementById('loadingDiv').style.display = 'none';
             document.getElementById('stopBtn').style.display = 'none';
             document.querySelector('.btn-secondary').style.display = 'inline-block';
+            document.querySelector('.btn-secondary1').style.display = 'inline-block';
             currentOptimization = null;
         }
 
